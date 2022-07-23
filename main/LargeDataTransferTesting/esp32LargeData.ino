@@ -20,7 +20,10 @@ String hostname = "TinyESP32";
   
 #define LED_PIN 13 
 
-char testArray[76800];
+const int arrWidth = 320; //320
+const int arrLength = 240; //240
+
+char testArray[arrWidth][arrLength]; //char takes 2bytes and int is 4 bytes so have to use char
 
 uint32_t timer = millis();
 
@@ -127,6 +130,46 @@ void sendJsonToAWS()
   Serial.println("Sent Data");
 }
 
+void testSend() {
+  String msg = "1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111\n";
+  uint32_t msgLen = arrLength*arrWidth;
+  msgLen = (arrLength * msg.length());
+  digitalWrite(LED_PIN, HIGH);
+  client.beginPublish(AWS_IOT_TOPIC_PUB, msgLen, false);
+  for(int y=0; y<arrLength; y++) {
+    //for(int x=0; x<arrWidth; x++) {
+      //client.print(testArray[x][y]);
+    //}
+    client.print(msg);
+    //client.print("\n");
+  }
+  client.endPublish();
+}
+
+void pubSubErr(int8_t MQTTErr)
+{
+  if (MQTTErr == MQTT_CONNECTION_TIMEOUT)
+    Serial.print("Connection tiemout");
+  else if (MQTTErr == MQTT_CONNECTION_LOST)
+    Serial.print("Connection lost");
+  else if (MQTTErr == MQTT_CONNECT_FAILED)
+    Serial.print("Connect failed");
+  else if (MQTTErr == MQTT_DISCONNECTED)
+    Serial.print("Disconnected");
+  else if (MQTTErr == MQTT_CONNECTED)
+    Serial.print("Connected");
+  else if (MQTTErr == MQTT_CONNECT_BAD_PROTOCOL)
+    Serial.print("Connect bad protocol");
+  else if (MQTTErr == MQTT_CONNECT_BAD_CLIENT_ID)
+    Serial.print("Connect bad Client-ID");
+  else if (MQTTErr == MQTT_CONNECT_UNAVAILABLE)
+    Serial.print("Connect unavailable");
+  else if (MQTTErr == MQTT_CONNECT_BAD_CREDENTIALS)
+    Serial.print("Connect bad credentials");
+  else if (MQTTErr == MQTT_CONNECT_UNAUTHORIZED)
+    Serial.print("Connect unauthorized");
+}
+
 void messageReceived(char *topic, byte *payload, unsigned int length)
 {
   Serial.print("Received [");
@@ -153,15 +196,21 @@ String boolToString(bool val) {
 }
 
 void arrayFiller() {
-  for(int i=0; i<76800; i++) {
-    testArray[i] = '1';
+  for(int y=0; y<arrLength; y++) {
+    for(int x=0; x<arrWidth; x++) {
+      char value = '1';
+      testArray[x][y] = value;
+      //Serial.print(value);
+    }
+    //Serial.println("");
   }
 }
 
 void sendCheck() {
   if (millis() - timer > 2000) {
     timer = millis(); // reset the timer
-    sendJsonToAWS();
+    //sendJsonToAWS();
+    testSend(); Serial.println("Sent Data");
       }
 }
 
@@ -182,6 +231,7 @@ void setup() {
 
 void loop() {
   if (!client.connected()) {
+    digitalWrite(LED_PIN, LOW);
     connectToAWS();
   }
   client.loop();
