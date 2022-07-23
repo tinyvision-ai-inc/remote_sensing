@@ -8,7 +8,7 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
-#include <Adafruit_GPS.h>
+#include <TinyGPSPlus.h>
 #include <SoftwareSerial.h>
 
 #include "time.h"
@@ -30,16 +30,16 @@ String hostname = "TinyESP32";
 #define RST_PIN 27   
 #define LED_PIN 13 
 
-#define GPSSerial Serial1
-//static const int RXPin = 33, TXPin = 15;
-//static const uint32_t GPSBaud = 9600;
-//SoftwareSerial GPSSerial(RXPin, TXPin);
-Adafruit_GPS GPS(&GPSSerial);
 uint32_t timer = millis();
 String LatLong;
 double LAT;
 double LONG;
+static const int RXPin = 33, TXPin = 15;
+static const uint32_t GPSBaud = 9600;
 
+TinyGPSPlus gps;
+
+SoftwareSerial GPSSerial(RXPin, TXPin);
 
 const char* ntpServer = "pool.ntp.org";
 
@@ -128,7 +128,7 @@ void sendJsonToAWS()
   reportedObj["temperature"] = random(40, 100);
   reportedObj["LAT"] = LAT;
   reportedObj["LONG"] = LONG;
-  //reportedObj["BatteryLevel"] = "79%";
+  reportedObj["BatteryLevel"] = "79%";
   reportedObj["wifi_strength"] = WiFi.RSSI();
   reportedObj["LockStatus"] = boolToString(lockEngage);
   reportedObj["timestamp"] = getTime();
@@ -142,7 +142,8 @@ void sendJsonToAWS()
   serializeJson(jsonDoc, jsonBuffer);
   //Serial.println(jsonBuffer);
   client.publish(AWS_IOT_TOPIC_PUB, jsonBuffer);
-  client.publish(AWS_IOT_TOPIC_SHADOW, jsonBuffer);
+  client.publish(AWS_IOT_TOPIC_SHADOW, jsonBuffer); //
+  Serial.println("Sent Data");
 }
 
 void messageReceived(String &topic, String &payload) {
@@ -200,35 +201,26 @@ void NFC() {
   }
 }
 
-void gpsCheck() {
-  char c = GPS.read();
-  Serial.print(c);
-  if (GPS.newNMEAreceived()) {
-    if (!GPS.parse(GPS.lastNMEA())){
-      return; }
-  }
+void sendCheck() {
   if (millis() - timer > 2000) {
     timer = millis(); // reset the timer
-    Serial.print("Fix: "); Serial.print((int)GPS.fix);
-    Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
-    Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
-    if (GPS.fix) {
-      Serial.print("Location: ");
-      String latitudeVal = String(GPS.latitudeDegrees, 8);
-      LAT = GPS.latitudeDegrees;
-      String longitudeVal = String(GPS.longitudeDegrees, 8);
-      LONG = GPS.longitudeDegrees;
-      //Serial.print("Speed (knots): "); Serial.println(GPS.speed);
-      //Serial.print("Angle: "); Serial.println(GPS.angle);
-      //Serial.print("Altitude: "); Serial.println(GPS.altitude);
-      LatLong = latitudeVal + ", " + longitudeVal;
-      Serial.println(LatLong);
-    }
+    /*Serial.print("Location: ");
+    String latitudeVal = String(gps.location.lat(), 6);
+    LAT = gps.location.lat();
+    String longitudeVal = String(gps.location.lng(), 6);
+    LONG = gps.location.lng();
+    LatLong = latitudeVal + ", " + longitudeVal;
+    Serial.println(LatLong); 
+    Serial.print(gps.location.lat(), 6);
+    Serial.print(F(","));
+    Serial.print(gps.location.lng(), 6);*/
+    //NFC();
     sendJsonToAWS();
-  }
-}
+      }
+    }
 
 void setup() {
+  while (!Serial);
   Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);
   connectToWiFi();
@@ -237,14 +229,28 @@ void setup() {
   configTime(0, 0, ntpServer);
   SPI.begin(); // init SPI bus
   rfid.PCD_Init(); // init MFRC522
-  GPS.begin(9600); //init GPS
-  //GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
-  //GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
-  //GPS.sendCommand(PGCMD_ANTENNA);
-  //delay(1000);
-  //GPSSerial.println(PMTK_Q_RELEASE);
+  GPSSerial.begin(GPSBaud);
+  delay(1000);
   Serial.println("Tap an RFID/NFC tag on the RFID-RC522 reader");
   randomSeed(analogRead(A7));
+}
+
+void displayInfo()
+{
+  //Serial.print(F("Location: ")); 
+  if (gps.location.isValid())
+  {
+    //Serial.print(gps.location.lat(), 6);
+    //Serial.print(F(","));
+    //Serial.print(gps.location.lng(), 6);
+    LAT = gps.location.lat();
+    LONG = gps.location.lng();
+  }
+  else
+  {
+    Serial.println("INVALID");
+  }
+  //Serial.println();
 }
 
 void loop() {
@@ -252,8 +258,15 @@ void loop() {
     connectToAWS();
   }
   client.loop();
-  NFC();
-  gpsCheck();
-  //delay(100);
-  //Serial.println(boolToString(lockEngage));
+  //NFC();
+  if (GPSSerial.available()){
+    char c = GPSSerial.read();
+    Serial.write(c);}
+    /*if (gps.encode(GPSSerial.read())){
+      displayInfo();
+      }
+    //gpsCheck();
+    //delay(10);
+  }*/
+  sendCheck();
 }
