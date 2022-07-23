@@ -8,6 +8,8 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
+#include <Adafruit_GPS.h>
+
 #include "time.h"
 
 // Wifi credentials
@@ -26,6 +28,14 @@ String hostname = "TinyESP32";
 #define SS_PIN  21  
 #define RST_PIN 27   
 #define LED_PIN 13 
+
+#define GPSSerial Serial1
+Adafruit_GPS GPS(&GPSSerial);
+uint32_t timer = millis();
+String LatLong;
+double LAT;
+double LONG;
+
 
 const char* ntpServer = "pool.ntp.org";
 
@@ -106,13 +116,14 @@ unsigned long getTime() {
 
 void sendJsonToAWS()
 {
-  StaticJsonDocument<128> jsonDoc;
+  StaticJsonDocument<256> jsonDoc;
   JsonObject stateObj = jsonDoc.createNestedObject("state");
   JsonObject reportedObj = stateObj.createNestedObject("reported");
   long randNumber;
   
   reportedObj["temperature"] = random(40, 100);
-  //reportedObj["GPS_Coordinates"] = "41.40338, 2.17403";
+  reportedObj["LAT"] = LAT;
+  reportedObj["LONG"] = LONG;
   //reportedObj["BatteryLevel"] = "79%";
   reportedObj["wifi_strength"] = WiFi.RSSI();
   reportedObj["LockStatus"] = boolToString(lockEngage);
@@ -180,8 +191,35 @@ void NFC() {
       }
       rfid.PICC_HaltA(); // halt PICC
       rfid.PCD_StopCrypto1(); // stop encryption on PCD
-      sendJsonToAWS();
+      
     }
+  }
+}
+
+void gpsCheck() {
+  char c = GPS.read();
+  if (GPS.newNMEAreceived()) {
+    if (!GPS.parse(GPS.lastNMEA())){
+      return; }
+  }
+  if (millis() - timer > 2000) {
+    timer = millis(); // reset the timer
+    Serial.print("Fix: "); Serial.print((int)GPS.fix);
+    Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
+    Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
+    if (GPS.fix) {
+      Serial.print("Location: ");
+      String latitudeVal = String(GPS.latitudeDegrees, 8);
+      LAT = GPS.latitudeDegrees;
+      String longitudeVal = String(GPS.longitudeDegrees, 8);
+      LONG = GPS.longitudeDegrees;
+      //Serial.print("Speed (knots): "); Serial.println(GPS.speed);
+      //Serial.print("Angle: "); Serial.println(GPS.angle);
+      //Serial.print("Altitude: "); Serial.println(GPS.altitude);
+      LatLong = latitudeVal + ", " + longitudeVal;
+      Serial.println(LatLong);
+    }
+    sendJsonToAWS();
   }
 }
 
@@ -194,6 +232,12 @@ void setup() {
   configTime(0, 0, ntpServer);
   SPI.begin(); // init SPI bus
   rfid.PCD_Init(); // init MFRC522
+  GPS.begin(9600); //init GPS
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
+  //GPS.sendCommand(PGCMD_ANTENNA);
+  delay(1000);
+  GPSSerial.println(PMTK_Q_RELEASE);
   Serial.println("Tap an RFID/NFC tag on the RFID-RC522 reader");
   randomSeed(analogRead(A7));
 }
@@ -203,7 +247,8 @@ void loop() {
     connectToAWS();
   }
   client.loop();
-  NFC();
-  delay(100);
-  Serial.println(boolToString(lockEngage));
+  //NFC();
+  gpsCheck();
+  //delay(100);
+  //Serial.println(boolToString(lockEngage));
 }
