@@ -9,6 +9,7 @@
 #include <MFRC522.h>
 
 #include <Adafruit_GPS.h>
+#include <SoftwareSerial.h>
 
 #include "time.h"
 
@@ -30,6 +31,9 @@ String hostname = "TinyESP32";
 #define LED_PIN 13 
 
 #define GPSSerial Serial1
+//static const int RXPin = 33, TXPin = 15;
+//static const uint32_t GPSBaud = 9600;
+//SoftwareSerial GPSSerial(RXPin, TXPin);
 Adafruit_GPS GPS(&GPSSerial);
 uint32_t timer = millis();
 String LatLong;
@@ -198,6 +202,7 @@ void NFC() {
 
 void gpsCheck() {
   char c = GPS.read();
+  Serial.print(c);
   if (GPS.newNMEAreceived()) {
     if (!GPS.parse(GPS.lastNMEA())){
       return; }
@@ -233,11 +238,11 @@ void setup() {
   SPI.begin(); // init SPI bus
   rfid.PCD_Init(); // init MFRC522
   GPS.begin(9600); //init GPS
-  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
+  //GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
+  //GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
   //GPS.sendCommand(PGCMD_ANTENNA);
-  delay(1000);
-  GPSSerial.println(PMTK_Q_RELEASE);
+  //delay(1000);
+  //GPSSerial.println(PMTK_Q_RELEASE);
   Serial.println("Tap an RFID/NFC tag on the RFID-RC522 reader");
   randomSeed(analogRead(A7));
 }
@@ -247,7 +252,7 @@ void loop() {
     connectToAWS();
   }
   client.loop();
-  //NFC();
+  NFC();
   gpsCheck();
   //delay(100);
   //Serial.println(boolToString(lockEngage));
