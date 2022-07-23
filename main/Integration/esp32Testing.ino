@@ -15,8 +15,11 @@ String hostname = "TinyESP32";
 #define AWS_IOT_ENDPOINT "a13zm95qeyv72n-ats.iot.us-west-2.amazonaws.com"
 #define AWS_IOT_TOPIC_SHADOW "$aws/things/" DEVICE_NAME "/shadow/update"
 #define AWS_IOT_TOPIC_PUB DEVICE_NAME "/pub"
-#define AWS_IOT_TOPIC_SUB DEVICE_NAME "/sub"
+#define AWS_IOT_TOPIC_SUB DEVICE_NAME "/sub" //sub
+#define AWS_IOT_TOPIC_LOCK DEVICE_NAME "/lock"
 #define AWS_MAX_RECONNECT_TRIES 50
+
+bool lockEngage = true;
 
 WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient(256);
@@ -68,7 +71,8 @@ void connectToAWS()
     return;
   }
   Serial.println("Connected to AWS!");
-  client.subscribe(AWS_IOT_TOPIC_SUB);
+  //client.subscribe(AWS_IOT_TOPIC_SUB);
+  client.subscribe(AWS_IOT_TOPIC_LOCK);
 }
 
 void sendJsonToAWS()
@@ -82,11 +86,12 @@ void sendJsonToAWS()
   reportedObj["GPS_Coordinates"] = "41.40338, 2.17403";
   reportedObj["BatteryLevel"] = "79%";
   reportedObj["wifi_strength"] = WiFi.RSSI();
+  reportedObj["Lock Status"] = lockEngage;
   
-  JsonObject locationObj = reportedObj.createNestedObject("location");
-  locationObj["name"] = "Garden";
+  //JsonObject locationObj = reportedObj.createNestedObject("location");
+  //locationObj["name"] = "Garden";
 
-  Serial.println("Publishing message to AWS...");
+  //Serial.println("Publishing message to AWS...");
   //serializeJson(doc, Serial);
   char jsonBuffer[512];
   serializeJson(jsonDoc, jsonBuffer);
@@ -97,21 +102,42 @@ void sendJsonToAWS()
 
 void messageReceived(String &topic, String &payload) {
   Serial.println("incoming: " + topic + " - " + payload);
+  if(topic=="Tiny-ESP32/lock"){
+    if(payload=="false") {
+      lockEngage = false;
+    }
+    if(payload=="true") {
+      lockEngage = true;
+    }
+  }
+}
+
+String boolToString(bool val) {
+  String converted;
+  if(val){
+    converted = "True";
+  }
+  else {
+    converted = "False";
+  }
+  return converted;
 }
 
 void setup() {
   Serial.begin(9600);
   connectToWiFi();
   connectToAWS();
+  client.onMessage(messageReceived);
   randomSeed(analogRead(A9));
 }
 
 void loop() {
+  if (!client.connected()) {
+    connectToAWS();
+  }
   sendJsonToAWS();
   client.loop();
-  //client.poll();
   delay(1000);
-  //Serial.println("I didn't crash!! :)");
-  delay(1000);
+  Serial.println(boolToString(lockEngage));
 
 }
